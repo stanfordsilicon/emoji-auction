@@ -113,7 +113,7 @@
     if (!session || !session.roomCode) return;
     socket.emit('rejoin_room', { roomCode: session.roomCode, playerId: myId, username: session.username }, (res) => {
       if (!res.ok) {
-        clearSession();
+        returnToLogin(room ? "That game session isn't available anymore — please rejoin or start a new game." : null);
         return;
       }
       usernameInput.value = session.username || '';
@@ -123,6 +123,34 @@
 
   socket.on('room_update', (updatedRoom) => applyRoom(updatedRoom));
   socket.on('connect_error', () => toast('Connection error — retrying…'));
+
+  // Resets local state and bounces back to the login screen — used both for
+  // an explicit "Go Home" and for recovering from a room/player the server
+  // no longer recognizes (e.g. the game ended, the room emptied out, or the
+  // server restarted) so a stale mid-game screen never becomes a dead end.
+  function returnToLogin(message) {
+    clearSession();
+    clearInterval(timerInterval);
+    room = null;
+    showScreen('login');
+    usernameInput.value = '';
+    roomCodeInput.value = '';
+    if (message) toast(message);
+  }
+
+  // Every other-than-lobby socket action funnels its failure through here:
+  // a room/player the server can no longer find means this client's session
+  // is stale (the game ended, everyone left, or — during development — the
+  // server restarted and lost its in-memory rooms), so recover to login
+  // instead of leaving the player stuck on a dead screen with an inline
+  // error and no way forward.
+  function handleErrorResponse(res) {
+    if (res.code === 'ROOM_NOT_FOUND' || res.code === 'NOT_IN_ROOM') {
+      returnToLogin("That game session isn't available anymore — please rejoin or start a new game.");
+      return;
+    }
+    toast(res.error);
+  }
 
   // ---------- CENTRAL ROOM RENDERER ----------
   function applyRoom(updatedRoom) {
@@ -302,13 +330,13 @@
   document.getElementById('btn-toggle-ready').addEventListener('click', () => {
     const me = room.players.find((p) => p.id === myId);
     socket.emit('set_ready', { ready: !(me && me.ready) }, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
   document.getElementById('btn-start-game').addEventListener('click', () => {
     socket.emit('start_game', {}, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
@@ -336,7 +364,7 @@
       removeBtn.textContent = '✕';
       removeBtn.addEventListener('click', () => {
         socket.emit('remove_word', { wordId: w.id }, (res) => {
-          if (!res.ok) return toast(res.error);
+          if (!res.ok) return handleErrorResponse(res);
           room.round.myDraft = res.draft;
           renderWriting();
         });
@@ -350,8 +378,6 @@
   function renderWriting() {
     document.getElementById('writing-emoji').textContent = room.round.emoji;
     document.getElementById('writing-max-words').textContent = room.maxWordsPerPlayer;
-    const hints = room.round.hints || [];
-    document.getElementById('writing-hint-text').textContent = hints.length ? `e.g. ${hints.join(', ')}…` : '';
     const draft = room.round.myDraft || [];
     renderWordChips(draft);
     const remaining = room.maxWordsPerPlayer - draft.length;
@@ -372,6 +398,10 @@
     socket.emit('submit_word', { text }, (res) => {
       const feedback = document.getElementById('writing-feedback');
       if (!res.ok) {
+        if (res.code === 'ROOM_NOT_FOUND' || res.code === 'NOT_IN_ROOM') {
+          handleErrorResponse(res);
+          return;
+        }
         feedback.textContent = res.error;
         return;
       }
@@ -384,7 +414,7 @@
 
   document.getElementById('btn-writing-ready').addEventListener('click', () => {
     socket.emit('phase_ready', { phase: 'writing' }, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
@@ -393,12 +423,16 @@
     const board = document.getElementById('betting-board');
     board.innerHTML = '';
     const myEntryIds = new Set(room.round.myEntryIds || []);
+    const myBetExcludedIds = new Set(room.round.myBetExcludedIds || []);
     const myBet = room.round.myBet;
 
     (room.round.entries || []).forEach((entry) => {
-      const isMine = myEntryIds.has(entry.id);
+      const isExcluded = myBetExcludedIds.has(entry.id); // sole-authored by me — never bettable
+      const isCoAuthored = myEntryIds.has(entry.id) && !isExcluded; // I wrote it too, but so did someone else
+      const isMyBet = myBet && myBet.entryId === entry.id;
+
       const card = document.createElement('div');
-      card.className = 'entry-card' + (isMine ? ' mine' : '');
+      card.className = 'entry-card' + (isExcluded ? ' mine' : '');
 
       const text = document.createElement('div');
       text.className = 'entry-text';
@@ -416,12 +450,29 @@
       meta.appendChild(oddsLabel);
       card.appendChild(meta);
 
-      if (isMine) {
+      if (isExcluded) {
         const note = document.createElement('div');
         note.className = 'hint';
         note.textContent = "This is your entry — you can't bet on it.";
         card.appendChild(note);
       } else {
+        if (isCoAuthored) {
+          const note = document.createElement('div');
+          note.className = 'hint';
+          note.textContent = 'You also wrote this — betting is open since someone else matched it.';
+          card.appendChild(note);
+        }
+
+        // One control cluster per card: a bet-status badge (only once you've
+        // actually got a bet down here) plus a single amount input + button
+        // that both places a first bet and updates an existing one.
+        if (isMyBet) {
+          const badge = document.createElement('div');
+          badge.className = 'my-bet-badge';
+          badge.textContent = `Your bet: ${myBet.amount} chips`;
+          card.appendChild(badge);
+        }
+
         const actions = document.createElement('div');
         actions.className = 'entry-actions';
         const amountInput = document.createElement('input');
@@ -435,43 +486,34 @@
         const betBtn = document.createElement('button');
         betBtn.type = 'button';
         betBtn.className = 'btn btn-primary btn-small';
-        betBtn.textContent = 'Bet';
+        betBtn.textContent = isMyBet ? 'Update' : 'Bet';
         betBtn.addEventListener('click', () => {
           const amount = Number(amountInput.value);
           if (!amount) return toast('Enter a chip amount first.');
           socket.emit('place_bet', { entryId: entry.id, amount }, (res) => {
-            if (!res.ok) return toast(res.error);
+            if (!res.ok) return handleErrorResponse(res);
             delete localBetDrafts[entry.id];
           });
         });
         actions.appendChild(amountInput);
         actions.appendChild(betBtn);
-        card.appendChild(actions);
-
-        if (myBet && myBet.entryId === entry.id) {
-          const badge = document.createElement('div');
-          badge.className = 'my-bet-badge';
-          badge.textContent = `Your bet: ${myBet.amount} chips`;
-          card.appendChild(badge);
+        if (isMyBet) {
+          const clearBtn = document.createElement('button');
+          clearBtn.type = 'button';
+          clearBtn.className = 'btn btn-secondary btn-small';
+          clearBtn.textContent = 'Clear';
+          clearBtn.addEventListener('click', () => {
+            socket.emit('place_bet', { entryId: entry.id, amount: 0 }, (res) => {
+              if (!res.ok) handleErrorResponse(res);
+            });
+          });
+          actions.appendChild(clearBtn);
         }
+        card.appendChild(actions);
       }
 
       board.appendChild(card);
     });
-
-    if (myBet) {
-      const clearBtn = document.createElement('button');
-      clearBtn.type = 'button';
-      clearBtn.className = 'btn btn-secondary btn-small';
-      clearBtn.textContent = 'Clear my bet';
-      clearBtn.style.marginBottom = '10px';
-      clearBtn.addEventListener('click', () => {
-        socket.emit('place_bet', { entryId: myBet.entryId, amount: 0 }, (res) => {
-          if (!res.ok) toast(res.error);
-        });
-      });
-      board.insertBefore(clearBtn, board.firstChild);
-    }
 
     const readyBtn = document.getElementById('btn-betting-ready');
     readyBtn.textContent = room.round.myReady ? 'Cancel Lock In' : '🔒 Lock In';
@@ -480,7 +522,7 @@
 
   document.getElementById('btn-betting-ready').addEventListener('click', () => {
     socket.emit('phase_ready', { phase: 'betting' }, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
@@ -535,7 +577,7 @@
       if (!isMine) {
         card.addEventListener('click', () => {
           socket.emit('cast_vote', { entryId: entry.id }, (res) => {
-            if (!res.ok) return toast(res.error);
+            if (!res.ok) return handleErrorResponse(res);
             room.round.myVotes = res.myVotes;
             renderVoting();
           });
@@ -552,7 +594,7 @@
 
   document.getElementById('btn-voting-ready').addEventListener('click', () => {
     socket.emit('phase_ready', { phase: 'voting' }, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
@@ -652,7 +694,7 @@
 
   document.getElementById('btn-next-round').addEventListener('click', () => {
     socket.emit('next_round', {}, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
@@ -673,17 +715,21 @@
   document.getElementById('btn-play-again').addEventListener('click', () => {
     viewingFinalLocally = false;
     socket.emit('play_again', {}, (res) => {
-      if (!res.ok) toast(res.error);
+      if (!res.ok) handleErrorResponse(res);
     });
   });
 
-  document.getElementById('btn-go-home').addEventListener('click', () => {
-    socket.emit('leave_room', {}, () => {
-      clearSession();
-      room = null;
-      showScreen('login');
-      usernameInput.value = '';
-      roomCodeInput.value = '';
-    });
+  function leaveAndReturnToLogin() {
+    socket.emit('leave_room', {}, () => returnToLogin());
+  }
+
+  document.getElementById('btn-go-home').addEventListener('click', leaveAndReturnToLogin);
+
+  // Reachable from the writing/betting/voting/reveal topbar — without this,
+  // a player stuck on a game screen (e.g. their room became invalid) had no
+  // way back to login short of a manual page refresh.
+  document.getElementById('btn-topbar-leave').addEventListener('click', () => {
+    if (!confirm('Leave this game?')) return;
+    leaveAndReturnToLogin();
   });
 })();

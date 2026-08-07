@@ -142,7 +142,7 @@ io.on('connection', (socket) => {
       socket.data.playerId = id;
       cb && cb({ ok: true, room: rooms.toClientView(room, id) });
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -159,7 +159,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true, room: rooms.toClientView(room, id) });
       broadcastRoom(code, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -179,7 +179,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true, room: rooms.toClientView(room, id) });
       broadcastRoom(code, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -189,7 +189,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true });
       broadcastRoom(socket.data.roomCode, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -202,7 +202,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true });
       broadcastRoom(roomCode, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -211,7 +211,7 @@ io.on('connection', (socket) => {
       const { room, draft } = await rooms.submitWord(socket.data.roomCode, socket.data.playerId, text);
       cb && cb({ ok: true, draft });
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -220,7 +220,7 @@ io.on('connection', (socket) => {
       const { room, draft } = await rooms.removeWord(socket.data.roomCode, socket.data.playerId, wordId);
       cb && cb({ ok: true, draft });
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -230,7 +230,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true });
       broadcastRoom(socket.data.roomCode, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -239,7 +239,7 @@ io.on('connection', (socket) => {
       const { room, myVotes } = await rooms.castVote(socket.data.roomCode, socket.data.playerId, entryId);
       cb && cb({ ok: true, myVotes });
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -254,7 +254,7 @@ io.on('connection', (socket) => {
       broadcastRoom(roomCode, room);
       if (allReady) advancePhase(roomCode);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -267,7 +267,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true });
       broadcastRoom(roomCode, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 
@@ -278,7 +278,7 @@ io.on('connection', (socket) => {
       cb && cb({ ok: true });
       broadcastRoom(roomCode, room);
     } catch (e) {
-      cb && cb({ ok: false, error: e.message });
+      cb && cb({ ok: false, error: e.message, code: e.code });
     }
   });
 

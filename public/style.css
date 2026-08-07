@@ -293,6 +293,22 @@ body {
 .timer { font-size: 1.5rem; font-weight: 800; color: var(--primary); min-width: 42px; text-align: center; }
 .timer.low { color: var(--danger); animation: pulse 0.6s infinite; }
 
+.topbar-leave-btn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: #f0eefa;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.topbar-leave-btn:hover { background: #ffe3ec; color: var(--danger); }
+
 @keyframes pulse {
   0%, 100% { transform: scale(1); }
   50% { transform: scale(1.15); }

@@ -38,10 +38,10 @@
 const { EMOJIS } = require('../data/emojiData');
 const store = require('./store');
 
-const TOTAL_ROUNDS = 5;
-const WRITING_SECONDS = Number(process.env.EA_WRITING_SECONDS) || 45;
-const BETTING_SECONDS = Number(process.env.EA_BETTING_SECONDS) || 30;
-const VOTING_SECONDS = Number(process.env.EA_VOTING_SECONDS) || 20;
+const TOTAL_ROUNDS = Number(process.env.EA_TOTAL_ROUNDS) || 3;
+const WRITING_SECONDS = Number(process.env.EA_WRITING_SECONDS) || 30;
+const BETTING_SECONDS = Number(process.env.EA_BETTING_SECONDS) || 20;
+const VOTING_SECONDS = Number(process.env.EA_VOTING_SECONDS) || 15;
 const MAX_PLAYERS = 8;
 const MAX_WORDS_PER_PLAYER = 4;
 const VOTES_PER_PLAYER = 3;
@@ -64,6 +64,10 @@ function err(code, message) {
 
 function normalizeWord(text) {
   return String(text || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function isSoleAuthor(entry, playerId) {
+  return entry.authorIds.length === 1 && entry.authorIds[0] === playerId;
 }
 
 function randomRoomCode() {
@@ -107,8 +111,7 @@ function pickRoundEmojiPlan() {
   return indices.map((emojiIndex, i) => ({
     roundNumber: i + 1,
     emojiIndex,
-    emoji: EMOJIS[emojiIndex].emoji,
-    hints: EMOJIS[emojiIndex].hints,
+    emoji: EMOJIS[emojiIndex],
   }));
 }
 
@@ -117,7 +120,6 @@ function newRound(plan) {
   return {
     roundNumber: plan.roundNumber,
     emoji: plan.emoji,
-    hints: plan.hints,
     drafts: {}, // playerId -> [{ id, text, normalized, submittedAt }]
     entries: [], // populated when writing ends: [{ id, authorIds, text, normalized }]
     bets: {}, // playerId -> { entryId, amount, placedAt }
@@ -377,7 +379,10 @@ async function placeBet(roomCode, playerId, entryId, amount) {
 
   const entry = round.entries.find((e) => e.id === entryId);
   if (!entry) throw err('BAD_ENTRY', 'That entry no longer exists.');
-  if (entry.authorIds.includes(playerId)) throw err('OWN_ENTRY', "You can't bet on your own entry.");
+  // Betting is only off-limits when you're the *sole* author — if someone
+  // else independently wrote the same word too, the entry isn't purely
+  // yours anymore and you can back it like anyone else's entry.
+  if (isSoleAuthor(entry, playerId)) throw err('OWN_ENTRY', "You can't bet on your own entry.");
   if (amt < MIN_BET) throw err('BET_TOO_LOW', `Minimum bet is ${MIN_BET} chips.`);
   if (amt > player.chips) throw err('BET_TOO_HIGH', "You don't have that many chips.");
 
@@ -657,7 +662,6 @@ function toClientView(room, forPlayerId) {
     roundView = {
       roundNumber: round.roundNumber,
       emoji: round.emoji,
-      hints: round.hints,
       phaseEndsAt: round.phaseEndsAt,
       entryCount: round.entries.length,
       entries: room.state === 'betting' || room.state === 'voting' ? publicEntries : [],
@@ -671,11 +675,16 @@ function toClientView(room, forPlayerId) {
       const draft = (round.drafts && round.drafts[forPlayerId]) || [];
       const myBet = round.bets[forPlayerId] || null;
       const myVotes = round.votes[forPlayerId] || [];
+      // Any entry you contributed to is off-limits to vote for. Betting is
+      // stricter only in the other direction — off-limits solely when
+      // you're the entry's *only* author (see isSoleAuthor).
       const myEntryIds = round.entries.filter((e) => e.authorIds.includes(forPlayerId)).map((e) => e.id);
+      const myBetExcludedIds = round.entries.filter((e) => isSoleAuthor(e, forPlayerId)).map((e) => e.id);
       roundView.myDraft = draft.map((w) => ({ id: w.id, text: w.text }));
       roundView.myBet = myBet;
       roundView.myVotes = myVotes;
       roundView.myEntryIds = myEntryIds;
+      roundView.myBetExcludedIds = myBetExcludedIds;
       roundView.myReady = !!room.phaseReady[forPlayerId];
       roundView.myChips = room.players[forPlayerId].chips;
     }
@@ -788,6 +797,7 @@ function buildGameSessionRecord(room) {
     return {
       roundNumber: round.roundNumber,
       emoji: round.emoji,
+      roundStartedAt: new Date(round.writingStartedAt),
       // Global: phase-by-phase timestamps this round moved through.
       writingStartedAt: new Date(round.writingStartedAt),
       bettingStartedAt: round.bettingStartedAt ? new Date(round.bettingStartedAt) : null,
@@ -844,6 +854,7 @@ function buildGameSessionRecord(room) {
     return {
       playerId: p.id,
       username: p.username,
+      color: p.color,
       finalChips: p.chips,
       startingChips: STARTING_CHIPS,
       netChipChange: p.chips - STARTING_CHIPS,
@@ -880,6 +891,7 @@ function buildGameSessionRecord(room) {
   return {
     game: 'Emoji Auction',
     roomCode: room.roomCode,
+    language: 'en',
     // Global: session start/end/duration.
     gameStartedAt: new Date(gameStartedAt),
     gameEndedAt: new Date(gameEndedAt),
