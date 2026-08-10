@@ -107,6 +107,57 @@
     loginError.classList.remove('hidden');
   }
 
+  // ---------- QMoji Arcade: party continuity from the homescreen ----------
+  // Enhancement only — if there's no ?room= or the lookup fails, none of
+  // this runs and the login screen above behaves exactly as it does
+  // standalone (including its own pre-existing ?room= invite-link prefill).
+  const backToLaunchpadBtn = document.getElementById('backToLaunchpadBtn');
+  let arcadeRoomCode = null;
+  let arcadeLang = null;
+  let arcadePlayerId = null;
+
+  backToLaunchpadBtn.addEventListener('click', () => {
+    window.location.href = QMojiArcade.backToHomescreenUrl(arcadeRoomCode, arcadeLang, arcadePlayerId);
+  });
+
+  (async function initArcadeLink() {
+    const arcade = await QMojiArcade.initArcade();
+    if (!arcade) return;
+    arcadeRoomCode = arcade.roomCode;
+    arcadeLang = arcade.lang;
+    arcadePlayerId = arcade.playerId;
+
+    const me = (arcade.room.players || []).find((p) => p.playerId === arcadePlayerId);
+    if (!me) {
+      // A raw game link was opened directly (not routed through the
+      // homescreen) — the existing invite-link code above already prefilled
+      // the room code; just also enroll whoever joins into the arcade party.
+      document.getElementById('btn-join-room').addEventListener('click', () => {
+        const name = usernameInput.value.trim();
+        if (name) QMojiArcade.joinRoom(arcadeRoomCode, name).catch(() => {});
+      });
+      return;
+    }
+
+    // Known party member — skip the manual entry screen entirely. Try to
+    // join the room this game already knows about; if this is the first
+    // arcade player to reach this game, seed one under the party's code
+    // instead of a random one (one code, sourced from the URL).
+    usernameInput.value = me.name;
+    socket.emit('join_room', { username: me.name, roomCode: arcadeRoomCode, playerId: myId }, (res) => {
+      if (res.ok) {
+        saveSession(res.room.roomCode, me.name);
+        applyRoom(res.room);
+        return;
+      }
+      socket.emit('create_room', { username: me.name, playerId: myId, code: arcadeRoomCode }, (res2) => {
+        if (!res2.ok) return; // arcade layer is an enhancement — leave the standalone login screen up
+        saveSession(res2.room.roomCode, me.name);
+        applyRoom(res2.room);
+      });
+    });
+  })();
+
   // ---------- REJOIN AFTER REFRESH ----------
   socket.on('connect', () => {
     const session = loadSession();

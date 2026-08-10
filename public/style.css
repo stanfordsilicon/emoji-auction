@@ -669,3 +669,20 @@ body {
   .entry-board { grid-template-columns: 1fr; }
   .word-chips { grid-template-columns: 1fr; }
 }
+
+.back-to-launchpad {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 500;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+.back-to-launchpad:hover { background: rgba(0, 0, 0, 0.5); }

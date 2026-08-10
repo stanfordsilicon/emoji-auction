@@ -141,8 +141,19 @@ function newRound(plan) {
   };
 }
 
-async function createRoom(playerId, username) {
-  const roomCode = await generateUniqueRoomCode();
+// desiredCode, when given, adopts an externally-sourced code (the arcade
+// party's room code) instead of generating a random one — "one code,
+// sourced from the URL when it's there," per the arcade contract. If a
+// room under that code already exists here (e.g. two arcade players both
+// landed on this game first), that existing room is joined instead so
+// there's still only ever one room per code.
+async function createRoom(playerId, username, desiredCode) {
+  if (desiredCode) {
+    const normalized = String(desiredCode).trim().toUpperCase();
+    const existing = await store.getRoom(normalized);
+    if (existing) return joinRoom(normalized, playerId, username);
+  }
+  const roomCode = desiredCode ? String(desiredCode).trim().toUpperCase() : await generateUniqueRoomCode();
   const room = {
     roomCode,
     hostId: playerId,

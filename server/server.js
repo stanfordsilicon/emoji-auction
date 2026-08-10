@@ -4,6 +4,7 @@ const express = require('express');
 const { Server } = require('socket.io');
 const rooms = require('./game/roomManager');
 const { connectMongo, getDb, recordPlayerResults, recordKeywordStats } = require('./data/mongo');
+const { arcadeProxy } = require('./arcade-proxy');
 
 const PORT = process.env.PORT || 4336;
 
@@ -13,6 +14,8 @@ const PORT = process.env.PORT || 4336;
 const DISCONNECT_GRACE_MS = 5 * 60 * 1000;
 
 const app = express();
+app.use(express.json());
+app.all('/arcade-api/v1/*', arcadeProxy); // local dev only — see arcade-proxy.js
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 const server = http.createServer(app);
@@ -132,11 +135,11 @@ async function advancePhase(roomCode) {
 }
 
 io.on('connection', (socket) => {
-  socket.on('create_room', async ({ username, playerId } = {}, cb) => {
+  socket.on('create_room', async ({ username, playerId, code } = {}, cb) => {
     try {
       const id = String(playerId || '').trim() || socket.id;
       const name = String(username || '').trim().slice(0, 20) || `Player${Math.floor(Math.random() * 9999)}`;
-      const room = await rooms.createRoom(id, name);
+      const room = await rooms.createRoom(id, name, code);
       socket.join(room.roomCode);
       socket.data.roomCode = room.roomCode;
       socket.data.playerId = id;
