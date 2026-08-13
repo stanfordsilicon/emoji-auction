@@ -1,9 +1,28 @@
 (() => {
-  const socket = io();
+  // No more persistent Socket.IO connection -- every action is a plain HTTP
+  // request, and room updates arrive via polling instead of a push
+  // broadcast. See server/app.js's top comment for why (Vercel serverless
+  // has no long-lived process to hold a WebSocket open, and no shared
+  // memory between invocations to broadcast from anyway).
+  async function api(action, payload) {
+    const body = Object.assign({}, payload);
+    body.playerId = myId;
+    if (room && !body.roomCode) body.roomCode = room.roomCode;
+    try {
+      const res = await fetch(`/api/${action}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      return await res.json();
+    } catch (e) {
+      return { ok: false, error: 'Connection error — please try again.' };
+    }
+  }
 
   // Player identity is a persistent id kept in sessionStorage (not the
-  // socket id) — a refresh gets a brand new socket but keeps the same
-  // device id, which is what lets rejoin_room put you right back where you
+  // socket id) — a refresh gets a brand new HTTP session but keeps the same
+  // device id, which is what lets rejoin-room put you right back where you
   // were. sessionStorage (not localStorage) keeps two tabs on one device
   // from collapsing into a single player identity.
   function getDeviceId() {
@@ -34,10 +53,12 @@
   }
 
   // Single source of truth for what this client knows about the room —
-  // always replaced wholesale from the server's room_update payload rather
+  // always replaced wholesale from the latest poll/action response rather
   // than patched piecemeal.
   let room = null;
   let timerInterval = null;
+  let pollTimer = null;
+  let heartbeatTimer = null;
   let localBetDrafts = {}; // entryId -> typed (not-yet-submitted) bet amount, reset each betting phase
   let revealIndex = -1; // local pointer into round.results for the reveal screen's step animation
   let viewingFinalLocally = false; // whether this tab has clicked through to the final screen
@@ -68,6 +89,69 @@
     toast._t = setTimeout(() => el.classList.add('hidden'), 2600);
   }
 
+  // ---------- POLLING + PRESENCE ----------
+  // Replaces the old room_update socket broadcast. Every response is a full
+  // authoritative room snapshot, same shape that broadcast always carried.
+  // Two speeds: the timed phases (writing/betting/voting) poll faster since
+  // other players' entries/bets/votes should show up promptly on a shared
+  // board; the lobby/reveal/final screens are mostly waiting on a host
+  // action, so a slower poll is plenty.
+  function pollIntervalFor(state) {
+    return state === 'writing' || state === 'betting' || state === 'voting' ? 1200 : 2500;
+  }
+
+  function startPolling() {
+    stopPolling();
+    const tick = async () => {
+      if (!room) return;
+      try {
+        const res = await fetch(`/api/room?code=${encodeURIComponent(room.roomCode)}&playerId=${encodeURIComponent(myId)}`);
+        const data = await res.json();
+        if (data.ok && data.room) applyRoom(data.room);
+      } catch (e) {
+        // transient network hiccup — the next tick retries
+      }
+      pollTimer = setTimeout(tick, pollIntervalFor(room ? room.state : 'lobby'));
+    };
+    pollTimer = setTimeout(tick, pollIntervalFor(room ? room.state : 'lobby'));
+  }
+
+  function stopPolling() {
+    clearTimeout(pollTimer);
+    pollTimer = null;
+  }
+
+  // Replaces Socket.IO's automatic disconnect detection — there's no
+  // persistent connection left for the server to notice a drop with, so
+  // presence is tracked with a periodic heartbeat instead (see
+  // roomManager.js's applyLazyStateUpdates for how staleness is actually
+  // detected).
+  function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatTimer = setInterval(() => {
+      if (room) api('heartbeat', {});
+    }, 4000);
+  }
+  function stopHeartbeat() {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+
+  // Explicit "leaving right now" signal for the common case (closing the
+  // tab) — sendBeacon is used because a plain fetch can get cancelled
+  // mid-flight when the page unloads. The heartbeat timeout on the server
+  // is the fallback for real drops (crash, network loss) where this never
+  // fires.
+  window.addEventListener('pagehide', () => {
+    if (!room || !navigator.sendBeacon) return;
+    try {
+      const blob = new Blob([JSON.stringify({ roomCode: room.roomCode, playerId: myId })], { type: 'application/json' });
+      navigator.sendBeacon('/api/leave-room', blob);
+    } catch (e) {
+      // best-effort only
+    }
+  });
+
   // ---------- LOGIN ----------
   const usernameInput = document.getElementById('input-username');
   const roomCodeInput = document.getElementById('input-room-code');
@@ -82,23 +166,30 @@
     usernameInput.focus();
   }
 
+  // Common tail end of create/join/rejoin: remember the session, apply
+  // whatever state the room is actually in, and start keeping it fresh.
+  function enterRoom(updatedRoom, username) {
+    saveSession(updatedRoom.roomCode, username);
+    applyRoom(updatedRoom);
+    startPolling();
+    startHeartbeat();
+  }
+
   document.getElementById('btn-create-room').addEventListener('click', () => {
     loginError.classList.add('hidden');
     const name = usernameInput.value;
-    socket.emit('create_room', { username: name, playerId: myId }, (res) => {
+    api('create-room', { username: name }).then((res) => {
       if (!res.ok) return showLoginError(res.error);
-      saveSession(res.room.roomCode, name || usernameInput.value);
-      applyRoom(res.room);
+      enterRoom(res.room, name || usernameInput.value);
     });
   });
 
   document.getElementById('btn-join-room').addEventListener('click', () => {
     loginError.classList.add('hidden');
     const name = usernameInput.value;
-    socket.emit('join_room', { username: name, roomCode: roomCodeInput.value, playerId: myId }, (res) => {
+    api('join-room', { username: name, roomCode: roomCodeInput.value }).then((res) => {
       if (!res.ok) return showLoginError(res.error);
-      saveSession(res.room.roomCode, name || usernameInput.value);
-      applyRoom(res.room);
+      enterRoom(res.room, name || usernameInput.value);
     });
   });
 
@@ -144,42 +235,38 @@
     // arcade player to reach this game, seed one under the party's code
     // instead of a random one (one code, sourced from the URL).
     usernameInput.value = me.name;
-    socket.emit('join_room', { username: me.name, roomCode: arcadeRoomCode, playerId: myId }, (res) => {
-      if (res.ok) {
-        saveSession(res.room.roomCode, me.name);
-        applyRoom(res.room);
-        return;
-      }
-      socket.emit('create_room', { username: me.name, playerId: myId, code: arcadeRoomCode }, (res2) => {
-        if (!res2.ok) return; // arcade layer is an enhancement — leave the standalone login screen up
-        saveSession(res2.room.roomCode, me.name);
-        applyRoom(res2.room);
-      });
-    });
+    const res = await api('join-room', { username: me.name, roomCode: arcadeRoomCode });
+    if (res.ok) {
+      enterRoom(res.room, me.name);
+      return;
+    }
+    const res2 = await api('create-room', { username: me.name, code: arcadeRoomCode });
+    if (!res2.ok) return; // arcade layer is an enhancement — leave the standalone login screen up
+    enterRoom(res2.room, me.name);
   })();
 
   // ---------- REJOIN AFTER REFRESH ----------
-  socket.on('connect', () => {
+  // On load, try to resume whatever room this device was last in. If the
+  // room's gone, just fall back to login.
+  (async function initSession() {
     const session = loadSession();
     if (!session || !session.roomCode) return;
-    socket.emit('rejoin_room', { roomCode: session.roomCode, playerId: myId, username: session.username }, (res) => {
-      if (!res.ok) {
-        returnToLogin(room ? "That game session isn't available anymore — please rejoin or start a new game." : null);
-        return;
-      }
-      usernameInput.value = session.username || '';
-      applyRoom(res.room);
-    });
-  });
-
-  socket.on('room_update', (updatedRoom) => applyRoom(updatedRoom));
-  socket.on('connect_error', () => toast('Connection error — retrying…'));
+    const res = await api('rejoin-room', { roomCode: session.roomCode, username: session.username });
+    if (!res.ok) {
+      clearSession();
+      return;
+    }
+    usernameInput.value = session.username || '';
+    enterRoom(res.room, session.username);
+  })();
 
   // Resets local state and bounces back to the login screen — used both for
   // an explicit "Go Home" and for recovering from a room/player the server
-  // no longer recognizes (e.g. the game ended, the room emptied out, or the
-  // server restarted) so a stale mid-game screen never becomes a dead end.
+  // no longer recognizes (e.g. the game ended, the room emptied out) so a
+  // stale mid-game screen never becomes a dead end.
   function returnToLogin(message) {
+    stopPolling();
+    stopHeartbeat();
     clearSession();
     clearInterval(timerInterval);
     room = null;
@@ -189,12 +276,12 @@
     if (message) toast(message);
   }
 
-  // Every other-than-lobby socket action funnels its failure through here:
-  // a room/player the server can no longer find means this client's session
-  // is stale (the game ended, everyone left, or — during development — the
-  // server restarted and lost its in-memory rooms), so recover to login
-  // instead of leaving the player stuck on a dead screen with an inline
-  // error and no way forward.
+  // Every other-than-login action funnels its failure through here: a
+  // room/player the server can no longer find means this client's session
+  // is stale (the game ended, everyone left, or the server restarted and
+  // lost its in-memory rooms locally), so recover to login instead of
+  // leaving the player stuck on a dead screen with an inline error and no
+  // way forward.
   function handleErrorResponse(res) {
     if (res.code === 'ROOM_NOT_FOUND' || res.code === 'NOT_IN_ROOM') {
       returnToLogin("That game session isn't available anymore — please rejoin or start a new game.");
@@ -380,14 +467,16 @@
 
   document.getElementById('btn-toggle-ready').addEventListener('click', () => {
     const me = room.players.find((p) => p.id === myId);
-    socket.emit('set_ready', { ready: !(me && me.ready) }, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('set-ready', { ready: !(me && me.ready) }).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
   document.getElementById('btn-start-game').addEventListener('click', () => {
-    socket.emit('start_game', {}, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('start-game', {}).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
@@ -414,10 +503,9 @@
       removeBtn.type = 'button';
       removeBtn.textContent = '✕';
       removeBtn.addEventListener('click', () => {
-        socket.emit('remove_word', { wordId: w.id }, (res) => {
+        api('remove-word', { wordId: w.id }).then((res) => {
           if (!res.ok) return handleErrorResponse(res);
-          room.round.myDraft = res.draft;
-          renderWriting();
+          applyRoom(res.room);
         });
       });
       chip.appendChild(label);
@@ -446,7 +534,7 @@
     const input = document.getElementById('writing-input');
     const text = input.value;
     if (!text.trim()) return;
-    socket.emit('submit_word', { text }, (res) => {
+    api('submit-word', { text }).then((res) => {
       const feedback = document.getElementById('writing-feedback');
       if (!res.ok) {
         if (res.code === 'ROOM_NOT_FOUND' || res.code === 'NOT_IN_ROOM') {
@@ -456,16 +544,16 @@
         feedback.textContent = res.error;
         return;
       }
-      room.round.myDraft = res.draft;
+      applyRoom(res.room);
       input.value = '';
-      renderWriting();
       input.focus();
     });
   });
 
   document.getElementById('btn-writing-ready').addEventListener('click', () => {
-    socket.emit('phase_ready', { phase: 'writing' }, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('phase-ready', { phase: 'writing' }).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
@@ -541,9 +629,10 @@
         betBtn.addEventListener('click', () => {
           const amount = Number(amountInput.value);
           if (!amount) return toast('Enter a chip amount first.');
-          socket.emit('place_bet', { entryId: entry.id, amount }, (res) => {
+          api('place-bet', { entryId: entry.id, amount }).then((res) => {
             if (!res.ok) return handleErrorResponse(res);
             delete localBetDrafts[entry.id];
+            applyRoom(res.room);
           });
         });
         actions.appendChild(amountInput);
@@ -554,8 +643,9 @@
           clearBtn.className = 'btn btn-secondary btn-small';
           clearBtn.textContent = 'Clear';
           clearBtn.addEventListener('click', () => {
-            socket.emit('place_bet', { entryId: entry.id, amount: 0 }, (res) => {
-              if (!res.ok) handleErrorResponse(res);
+            api('place-bet', { entryId: entry.id, amount: 0 }).then((res) => {
+              if (!res.ok) return handleErrorResponse(res);
+              applyRoom(res.room);
             });
           });
           actions.appendChild(clearBtn);
@@ -572,8 +662,9 @@
   }
 
   document.getElementById('btn-betting-ready').addEventListener('click', () => {
-    socket.emit('phase_ready', { phase: 'betting' }, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('phase-ready', { phase: 'betting' }).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
@@ -627,10 +718,9 @@
 
       if (!isMine) {
         card.addEventListener('click', () => {
-          socket.emit('cast_vote', { entryId: entry.id }, (res) => {
+          api('cast-vote', { entryId: entry.id }).then((res) => {
             if (!res.ok) return handleErrorResponse(res);
-            room.round.myVotes = res.myVotes;
-            renderVoting();
+            applyRoom(res.room);
           });
         });
       }
@@ -644,8 +734,9 @@
   }
 
   document.getElementById('btn-voting-ready').addEventListener('click', () => {
-    socket.emit('phase_ready', { phase: 'voting' }, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('phase-ready', { phase: 'voting' }).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
@@ -744,8 +835,9 @@
   });
 
   document.getElementById('btn-next-round').addEventListener('click', () => {
-    socket.emit('next_round', {}, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('next-round', {}).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
@@ -765,13 +857,14 @@
 
   document.getElementById('btn-play-again').addEventListener('click', () => {
     viewingFinalLocally = false;
-    socket.emit('play_again', {}, (res) => {
-      if (!res.ok) handleErrorResponse(res);
+    api('play-again', {}).then((res) => {
+      if (!res.ok) return handleErrorResponse(res);
+      applyRoom(res.room);
     });
   });
 
   function leaveAndReturnToLogin() {
-    socket.emit('leave_room', {}, () => returnToLogin());
+    api('leave-room', {}).then(() => returnToLogin());
   }
 
   document.getElementById('btn-go-home').addEventListener('click', leaveAndReturnToLogin);
