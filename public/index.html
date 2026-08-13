@@ -15,11 +15,11 @@
 <div class="vignette" aria-hidden="true"></div>
 
 <button id="backToLaunchpadBtn" class="back-to-launchpad" type="button" title="Return to launch pad">
-  ← RETURN TO LAUNCH PAD
+  ← <span data-i18n="back_to_launchpad">RETURN TO LAUNCH PAD</span>
 </button>
 
 <div class="loading-screen" id="loadingScreen" aria-hidden="true">
-  <p class="loading-text">LOADING<span class="loading-dots">...</span></p>
+  <p class="loading-text"><span data-i18n="loading">LOADING</span><span class="loading-dots">...</span></p>
   <div class="loading-bar"><div class="loading-bar-fill" id="loadingBarFill"></div></div>
 </div>
 
@@ -28,23 +28,23 @@
 <!-- LOGIN -->
 <section id="screen-login" class="screen active">
   <div class="card">
-    <h1 class="logo">Emoji Auction</h1>
-    <p class="tagline">Write it. Bet on it. Vote for it. Cash in.</p>
+    <h1 class="logo" data-i18n="app_title">Emoji Auction</h1>
+    <p class="tagline" data-i18n="app_tagline">Write it. Bet on it. Vote for it. Cash in.</p>
 
     <label class="field">
-      <span>Your name</span>
-      <input id="input-username" type="text" maxlength="20" placeholder="Player1234" autocomplete="off" />
+      <span data-i18n="username_label">Your name</span>
+      <input id="input-username" type="text" maxlength="20" data-i18n-placeholder="username_placeholder" placeholder="Player1234" autocomplete="off" />
     </label>
 
-    <button id="btn-create-room" class="btn btn-primary">Create Room</button>
+    <button id="btn-create-room" class="btn btn-primary" data-i18n="create_room_button">Create Room</button>
 
-    <div class="divider"><span>or</span></div>
+    <div class="divider"><span data-i18n="divider_or">or</span></div>
 
     <label class="field">
-      <span>Room code</span>
-      <input id="input-room-code" type="text" maxlength="4" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase" />
+      <span data-i18n="room_code_label">Room code</span>
+      <input id="input-room-code" type="text" maxlength="4" data-i18n-placeholder="room_code_placeholder" placeholder="ABCD" autocomplete="off" style="text-transform:uppercase" />
     </label>
-    <button id="btn-join-room" class="btn btn-secondary">Join Room</button>
+    <button id="btn-join-room" class="btn btn-secondary" data-i18n="join_room_button">Join Room</button>
 
     <p id="login-error" class="error-text hidden"></p>
     <p id="login-invite-hint" class="hint hidden"></p>
@@ -54,16 +54,15 @@
 <!-- LOBBY -->
 <section id="screen-lobby" class="screen">
   <div class="card">
-    <h2>Room Code</h2>
+    <h2 data-i18n="lobby_title">Room Code</h2>
     <div id="lobby-room-code" class="room-code">ABCD</div>
-    <p class="hint">Share this code with friends so they can join.</p>
-    <button id="btn-copy-code" class="btn btn-secondary">📋 Copy Invite Link</button>
+    <button id="btn-copy-code" class="btn btn-secondary" data-i18n="copy_invite_button">📋 Copy Invite Link</button>
 
-    <h3>Players</h3>
+    <h3 data-i18n="players_heading">Players</h3>
     <ul id="lobby-player-list" class="player-list"></ul>
 
-    <button id="btn-toggle-ready" class="btn btn-secondary">✅ Ready Up</button>
-    <button id="btn-start-game" class="btn btn-primary hidden" disabled>Start Game</button>
+    <button id="btn-toggle-ready" class="btn btn-secondary" data-i18n="ready_up_button">✅ Ready Up</button>
+    <button id="btn-start-game" class="btn btn-primary hidden" disabled data-i18n="start_game_button">Start Game</button>
     <p id="lobby-waiting" class="hint">Waiting for everyone to be ready…</p>
   </div>
 </section>
@@ -72,7 +71,7 @@
 <div id="game-topbar" class="game-topbar hidden">
   <div class="topbar-left">
     <div class="phase-badge" id="topbar-phase">Writing</div>
-    <div class="round-badge">Round <span id="topbar-round-number">1</span> / <span id="topbar-total-rounds">5</span></div>
+    <div class="round-badge" id="topbar-round-badge">Round 1 / 5</div>
   </div>
   <div class="topbar-right">
     <div class="chip-balance">💰 <span id="topbar-chips">500</span></div>
@@ -85,8 +84,8 @@
 <section id="screen-writing" class="screen">
   <div class="card wide yellow game-card">
     <div class="card-header">
-      <h2>Describe the emoji! <span class="soft">(up to <span id="writing-max-words">4</span> words)</span></h2>
-      <div class="room-code-label">Room Code<br /><span class="room-code-value">ABCD</span></div>
+      <h2><span data-i18n="writing_title">Describe the emoji!</span> <span class="soft" id="writing-max-words-suffix">(up to 4 words)</span></h2>
+      <div class="room-code-label"><span data-i18n="room_code_caption">Room Code</span><br /><span class="room-code-value">ABCD</span></div>
     </div>
     <div class="game-card-body">
       <div class="game-emoji-panel">
@@ -95,13 +94,13 @@
       <div class="game-content-panel">
         <div class="word-chips" id="writing-chips"></div>
         <form id="writing-form" class="writing-form">
-          <input id="writing-input" type="text" maxlength="40" placeholder="enter word" autocomplete="off" />
+          <input id="writing-input" type="text" maxlength="40" data-i18n-placeholder="writing_placeholder" placeholder="enter word" autocomplete="off" />
           <button type="submit" class="btn-inline-add" aria-label="Add word">+</button>
         </form>
         <p id="writing-feedback" class="feedback"></p>
       </div>
     </div>
-    <button id="btn-writing-ready" class="btn btn-secondary">🔒 Lock In</button>
+    <button id="btn-writing-ready" class="btn btn-secondary" data-i18n="lock_in_button">🔒 Lock In</button>
     <p class="hint" id="writing-ready-count"></p>
   </div>
 </section>
@@ -110,19 +109,18 @@
 <section id="screen-betting" class="screen">
   <div class="card wide yellow game-card">
     <div class="card-header">
-      <h2>Bet on the best words!</h2>
-      <div class="room-code-label">Room Code<br /><span class="room-code-value">ABCD</span></div>
+      <h2 data-i18n="betting_title">Bet on the best words!</h2>
+      <div class="room-code-label"><span data-i18n="room_code_caption">Room Code</span><br /><span class="room-code-value">ABCD</span></div>
     </div>
     <div class="game-card-body">
       <div class="game-emoji-panel">
         <div class="big-emoji" id="betting-emoji">🤔</div>
-        <p class="hint">Odds shift live as chips pile on. Can't bet on your own words.</p>
       </div>
       <div class="game-content-panel">
         <div id="betting-board" class="entry-board"></div>
       </div>
     </div>
-    <button id="btn-betting-ready" class="btn btn-secondary">🔒 Lock In</button>
+    <button id="btn-betting-ready" class="btn btn-secondary" data-i18n="lock_in_button">🔒 Lock In</button>
     <p class="hint" id="betting-ready-count"></p>
   </div>
 </section>
@@ -131,20 +129,19 @@
 <section id="screen-voting" class="screen">
   <div class="card wide yellow game-card">
     <div class="card-header">
-      <h2>Vote on the best words!</h2>
-      <div class="room-code-label">Room Code<br /><span class="room-code-value">ABCD</span></div>
+      <h2 data-i18n="voting_title">Vote on the best words!</h2>
+      <div class="room-code-label"><span data-i18n="room_code_caption">Room Code</span><br /><span class="room-code-value">ABCD</span></div>
     </div>
     <div class="game-card-body">
       <div class="game-emoji-panel">
         <div class="big-emoji" id="voting-emoji">🤔</div>
-        <p class="hint">Click a card to vote. Can't vote your own!</p>
         <div class="hearts-remaining-row" id="voting-hearts-row"></div>
       </div>
       <div class="game-content-panel">
         <div id="voting-board" class="entry-board"></div>
       </div>
     </div>
-    <button id="btn-voting-ready" class="btn btn-secondary">🔒 Lock In</button>
+    <button id="btn-voting-ready" class="btn btn-secondary" data-i18n="lock_in_button">🔒 Lock In</button>
     <p class="hint" id="voting-ready-count"></p>
   </div>
 </section>
@@ -154,7 +151,7 @@
   <div class="card wide yellow game-card">
     <div class="card-header">
       <h2 id="reveal-title">Results!</h2>
-      <div class="room-code-label">Room Code<br /><span class="room-code-value">ABCD</span></div>
+      <div class="room-code-label"><span data-i18n="room_code_caption">Room Code</span><br /><span class="room-code-value">ABCD</span></div>
     </div>
     <div class="game-card-body">
       <div class="game-emoji-panel">
@@ -162,30 +159,31 @@
       </div>
       <div class="game-content-panel">
         <div id="reveal-current" class="reveal-current"></div>
-        <button id="btn-reveal-next" class="btn btn-secondary">Reveal Next ▶</button>
+        <button id="btn-reveal-next" class="btn btn-secondary" data-i18n="reveal_next_button">Reveal Next ▶</button>
       </div>
     </div>
 
-    <h3>Leaderboard</h3>
+    <h3 data-i18n="leaderboard_heading">Leaderboard</h3>
     <div id="reveal-leaderboard" class="leaderboard-pills-row"></div>
 
-    <button id="btn-next-round" class="btn btn-primary hidden">Next Round</button>
-    <button id="btn-to-final" class="btn btn-primary hidden">See Final Results</button>
-    <p id="reveal-waiting" class="hint hidden">Waiting for the host…</p>
+    <button id="btn-next-round" class="btn btn-primary hidden" data-i18n="next_round_button">Next Round</button>
+    <button id="btn-to-final" class="btn btn-primary hidden" data-i18n="see_final_results_button">See Final Results</button>
+    <p id="reveal-waiting" class="hint hidden" data-i18n="reveal_waiting_host">Waiting for the host…</p>
   </div>
 </section>
 
 <!-- FINAL -->
 <section id="screen-final" class="screen">
   <div class="card">
-    <h1 class="logo">🏆 Final Results</h1>
+    <h1 class="logo" data-i18n="final_results_title">🏆 Final Results</h1>
     <ol id="final-leaderboard" class="leaderboard"></ol>
-    <button id="btn-play-again" class="btn btn-primary hidden">🔁 Play Again</button>
-    <p id="final-waiting" class="hint hidden">Waiting for the host to start a new game…</p>
-    <button id="btn-go-home" class="btn btn-secondary">Go Home</button>
+    <button id="btn-play-again" class="btn btn-primary hidden" data-i18n="play_again_button">🔁 Play Again</button>
+    <p id="final-waiting" class="hint hidden" data-i18n="final_waiting">Waiting for the host to start a new game…</p>
+    <button id="btn-go-home" class="btn btn-secondary" data-i18n="go_home_button">Go Home</button>
   </div>
 </section>
 
+<script src="i18n.js"></script>
 <script src="arcade-client.js"></script>
 <script src="client.js"></script>
 </body>

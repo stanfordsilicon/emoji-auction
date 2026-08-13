@@ -1,4 +1,9 @@
 (() => {
+  // Static (non-templated) UI text is data-i18n-driven -- see public/i18n.js.
+  // Anything with dynamic content (a score, a room code) is set directly
+  // below via t() instead, since data-i18n has no way to carry variables.
+  applyStaticTranslations();
+
   // No more persistent Socket.IO connection -- every action is a plain HTTP
   // request, and room updates arrive via polling instead of a push
   // broadcast. See server/app.js's top comment for why (Vercel serverless
@@ -16,7 +21,7 @@
       });
       return await res.json();
     } catch (e) {
-      return { ok: false, error: 'Connection error — please try again.' };
+      return { ok: false, error: t('connection_error') };
     }
   }
 
@@ -161,7 +166,7 @@
   const invitedRoomCode = new URLSearchParams(window.location.search).get('room');
   if (invitedRoomCode) {
     roomCodeInput.value = invitedRoomCode.trim().toUpperCase();
-    loginInviteHint.textContent = `You've been invited to room ${roomCodeInput.value} — enter a name and join!`;
+    loginInviteHint.textContent = t('invited_hint', { code: roomCodeInput.value });
     loginInviteHint.classList.remove('hidden');
     usernameInput.focus();
   }
@@ -194,7 +199,7 @@
   });
 
   function showLoginError(msg) {
-    loginError.textContent = msg || 'Something went wrong.';
+    loginError.textContent = msg || t('generic_error');
     loginError.classList.remove('hidden');
   }
 
@@ -302,7 +307,7 @@
   // way forward.
   function handleErrorResponse(res) {
     if (res.code === 'ROOM_NOT_FOUND' || res.code === 'NOT_IN_ROOM') {
-      returnToLogin("That game session isn't available anymore — please rejoin or start a new game.");
+      returnToLogin(t('session_expired'));
       return;
     }
     toast(res.error);
@@ -367,7 +372,7 @@
         left.appendChild(renderPlayerBadge(p));
         const name = document.createElement('span');
         name.className = 'name';
-        name.textContent = p.username + (p.id === myId ? ' (you)' : '');
+        name.textContent = p.username + (p.id === myId ? ' ' + t('you_suffix') : '');
         left.appendChild(name);
         const chips = document.createElement('span');
         chips.className = 'chips';
@@ -398,7 +403,7 @@
 
         const name = document.createElement('div');
         name.className = 'pill-name';
-        name.textContent = p.username + (p.id === myId ? ' (you)' : '');
+        name.textContent = p.username + (p.id === myId ? ' ' + t('you_suffix') : '');
         pill.appendChild(name);
 
         const chips = document.createElement('div');
@@ -424,10 +429,15 @@
   }
 
   function updateTopbar() {
-    const phaseNames = { writing: 'Writing', betting: 'Betting', voting: 'Voting', reveal: 'Results', final: 'Results' };
+    const phaseNames = {
+      writing: t('topbar_phase_writing'),
+      betting: t('topbar_phase_betting'),
+      voting: t('topbar_phase_voting'),
+      reveal: t('topbar_phase_results'),
+      final: t('topbar_phase_results'),
+    };
     document.getElementById('topbar-phase').textContent = phaseNames[room.state] || '';
-    document.getElementById('topbar-round-number').textContent = room.round.roundNumber;
-    document.getElementById('topbar-total-rounds').textContent = room.totalRounds;
+    document.getElementById('topbar-round-badge').textContent = t('round_badge', { round: room.round.roundNumber, total: room.totalRounds });
     const me = room.players.find((p) => p.id === myId);
     document.getElementById('topbar-chips').textContent = me ? me.chips : 0;
 
@@ -454,12 +464,12 @@
       left.appendChild(renderPlayerBadge(p));
       const name = document.createElement('span');
       name.className = 'name';
-      name.textContent = p.username + (p.id === room.hostId ? ' (host)' : '');
+      name.textContent = p.username + (p.id === room.hostId ? ' ' + t('host_suffix') : '');
       left.appendChild(name);
 
       const readyBadge = document.createElement('span');
       readyBadge.className = 'ready-badge ' + (p.ready ? 'is-ready' : 'is-waiting');
-      readyBadge.textContent = p.ready ? '✅ Ready' : '⏳ Waiting';
+      readyBadge.textContent = p.ready ? t('ready_badge') : t('waiting_badge');
 
       li.appendChild(left);
       li.appendChild(readyBadge);
@@ -471,7 +481,7 @@
     const allReady = room.players.length > 0 && room.players.every((p) => !p.connected || p.ready);
 
     const readyBtn = document.getElementById('btn-toggle-ready');
-    readyBtn.textContent = me && me.ready ? 'Cancel Ready' : '✅ Ready Up';
+    readyBtn.textContent = me && me.ready ? t('cancel_ready_button') : t('ready_up_button');
 
     const startBtn = document.getElementById('btn-start-game');
     startBtn.classList.toggle('hidden', !isHost);
@@ -479,8 +489,8 @@
 
     const waiting = document.getElementById('lobby-waiting');
     waiting.textContent = allReady
-      ? (isHost ? 'Everyone is ready — start when you are!' : 'Waiting for the host to start the game…')
-      : 'Waiting for everyone to be ready…';
+      ? (isHost ? t('lobby_waiting_host_ready') : t('lobby_waiting_guest_ready'))
+      : t('lobby_waiting_not_ready');
   }
 
   document.getElementById('btn-toggle-ready').addEventListener('click', () => {
@@ -502,7 +512,7 @@
     const url = `${window.location.origin}${window.location.pathname}?room=${room.roomCode}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast('Invite link copied!');
+      toast(t('invite_link_copied'));
     } catch (e) {
       toast(url);
     }
@@ -534,7 +544,7 @@
 
   function renderWriting() {
     document.getElementById('writing-emoji').textContent = room.round.emoji;
-    document.getElementById('writing-max-words').textContent = room.maxWordsPerPlayer;
+    document.getElementById('writing-max-words-suffix').textContent = t('writing_max_words_suffix', { max: room.maxWordsPerPlayer });
     const draft = room.round.myDraft || [];
     renderWordChips(draft);
     const remaining = room.maxWordsPerPlayer - draft.length;
@@ -543,8 +553,8 @@
     document.getElementById('writing-feedback').textContent = '';
 
     const readyBtn = document.getElementById('btn-writing-ready');
-    readyBtn.textContent = room.round.myReady ? 'Cancel Lock In' : '🔒 Lock In';
-    document.getElementById('writing-ready-count').textContent = `${room.round.readyCount}/${room.round.totalConnected} locked in`;
+    readyBtn.textContent = room.round.myReady ? t('cancel_lock_in_button') : t('lock_in_button');
+    document.getElementById('writing-ready-count').textContent = t('locked_in_count', { count: room.round.readyCount, total: room.round.totalConnected });
   }
 
   document.getElementById('writing-form').addEventListener('submit', (e) => {
@@ -599,10 +609,10 @@
       const meta = document.createElement('div');
       meta.className = 'entry-meta';
       const poolLabel = document.createElement('span');
-      poolLabel.textContent = `💰 ${entry.pool} chips bet`;
+      poolLabel.textContent = t('entry_pool_label', { pool: entry.pool });
       const oddsLabel = document.createElement('span');
       oddsLabel.className = 'entry-odds';
-      oddsLabel.textContent = entry.odds ? `${entry.odds.toFixed(2)}x` : 'no bets yet';
+      oddsLabel.textContent = entry.odds ? t('entry_odds_value', { odds: entry.odds.toFixed(2) }) : t('entry_no_bets_yet');
       meta.appendChild(poolLabel);
       meta.appendChild(oddsLabel);
       card.appendChild(meta);
@@ -610,13 +620,13 @@
       if (isExcluded) {
         const note = document.createElement('div');
         note.className = 'hint';
-        note.textContent = "This is your entry — you can't bet on it.";
+        note.textContent = t('entry_own_no_bet');
         card.appendChild(note);
       } else {
         if (isCoAuthored) {
           const note = document.createElement('div');
           note.className = 'hint';
-          note.textContent = 'You also wrote this — betting is open since someone else matched it.';
+          note.textContent = t('entry_co_authored_note');
           card.appendChild(note);
         }
 
@@ -626,7 +636,7 @@
         if (isMyBet) {
           const badge = document.createElement('div');
           badge.className = 'my-bet-badge';
-          badge.textContent = `Your bet: ${myBet.amount} chips`;
+          badge.textContent = t('my_bet_badge', { amount: myBet.amount });
           card.appendChild(badge);
         }
 
@@ -635,7 +645,7 @@
         const amountInput = document.createElement('input');
         amountInput.type = 'number';
         amountInput.min = room.minBet;
-        amountInput.placeholder = `min ${room.minBet}`;
+        amountInput.placeholder = t('bet_amount_placeholder', { min: room.minBet });
         amountInput.value = localBetDrafts[entry.id] || '';
         amountInput.addEventListener('input', () => {
           localBetDrafts[entry.id] = amountInput.value;
@@ -643,10 +653,10 @@
         const betBtn = document.createElement('button');
         betBtn.type = 'button';
         betBtn.className = 'btn btn-primary btn-small';
-        betBtn.textContent = isMyBet ? 'Update' : 'Bet';
+        betBtn.textContent = isMyBet ? t('bet_update_button') : t('bet_button');
         betBtn.addEventListener('click', () => {
           const amount = Number(amountInput.value);
-          if (!amount) return toast('Enter a chip amount first.');
+          if (!amount) return toast(t('bet_amount_required'));
           api('place-bet', { entryId: entry.id, amount }).then((res) => {
             if (!res.ok) return handleErrorResponse(res);
             delete localBetDrafts[entry.id];
@@ -659,7 +669,7 @@
           const clearBtn = document.createElement('button');
           clearBtn.type = 'button';
           clearBtn.className = 'btn btn-secondary btn-small';
-          clearBtn.textContent = 'Clear';
+          clearBtn.textContent = t('bet_clear_button');
           clearBtn.addEventListener('click', () => {
             api('place-bet', { entryId: entry.id, amount: 0 }).then((res) => {
               if (!res.ok) return handleErrorResponse(res);
@@ -675,8 +685,8 @@
     });
 
     const readyBtn = document.getElementById('btn-betting-ready');
-    readyBtn.textContent = room.round.myReady ? 'Cancel Lock In' : '🔒 Lock In';
-    document.getElementById('betting-ready-count').textContent = `${room.round.readyCount}/${room.round.totalConnected} locked in`;
+    readyBtn.textContent = room.round.myReady ? t('cancel_lock_in_button') : t('lock_in_button');
+    document.getElementById('betting-ready-count').textContent = t('locked_in_count', { count: room.round.readyCount, total: room.round.totalConnected });
   }
 
   document.getElementById('btn-betting-ready').addEventListener('click', () => {
@@ -725,7 +735,7 @@
       if (isMine) {
         const note = document.createElement('div');
         note.className = 'hint';
-        note.textContent = "This is your entry — you can't vote for it.";
+        note.textContent = t('entry_own_no_vote');
         card.appendChild(note);
       } else if (voted) {
         const badge = document.createElement('span');
@@ -747,8 +757,8 @@
     });
 
     const readyBtn = document.getElementById('btn-voting-ready');
-    readyBtn.textContent = room.round.myReady ? 'Cancel Lock In' : '🔒 Lock In';
-    document.getElementById('voting-ready-count').textContent = `${room.round.readyCount}/${room.round.totalConnected} locked in`;
+    readyBtn.textContent = room.round.myReady ? t('cancel_lock_in_button') : t('lock_in_button');
+    document.getElementById('voting-ready-count').textContent = t('locked_in_count', { count: room.round.readyCount, total: room.round.totalConnected });
   }
 
   document.getElementById('btn-voting-ready').addEventListener('click', () => {
@@ -763,13 +773,16 @@
     const box = document.getElementById('reveal-current');
     box.innerHTML = '';
     if (results.length === 0) {
-      box.innerHTML = '<p class="reveal-placeholder">Nobody wrote anything this round!</p>';
+      const p0 = document.createElement('p');
+      p0.className = 'reveal-placeholder';
+      p0.textContent = t('reveal_nobody_wrote');
+      box.appendChild(p0);
       return;
     }
     if (revealIndex < 0) {
       const p = document.createElement('p');
       p.className = 'reveal-placeholder';
-      p.textContent = `${results.length} word${results.length === 1 ? '' : 's'} up for vote. Tap "Reveal Next" to see how they did!`;
+      p.textContent = t(results.length === 1 ? 'reveal_words_up_for_vote_one' : 'reveal_words_up_for_vote_other', { count: results.length });
       box.appendChild(p);
       return;
     }
@@ -781,36 +794,36 @@
     if (r.isWinner) {
       const badge = document.createElement('span');
       badge.className = 'reveal-winner-badge';
-      badge.textContent = '🏆 Winner';
+      badge.textContent = t('reveal_winner_badge');
       word.appendChild(badge);
     }
     box.appendChild(word);
 
     const authorNames = r.authors
-      .map((a) => a.username + (a.id === myId ? ' (you)' : ''))
+      .map((a) => a.username + (a.id === myId ? ' ' + t('you_suffix') : ''))
       .join(' & ');
     const author = document.createElement('div');
     author.className = 'reveal-line';
-    author.textContent = `Written by ${authorNames}`;
+    author.textContent = t('written_by', { authors: authorNames });
     box.appendChild(author);
 
     const votesLine = document.createElement('div');
     votesLine.className = 'reveal-line';
-    votesLine.textContent = `❤️ ${r.votes} vote${r.votes === 1 ? '' : 's'} · 💰 ${r.pool} chips bet`;
+    votesLine.textContent = t(r.votes === 1 ? 'votes_and_pool_line_one' : 'votes_and_pool_line_other', { votes: r.votes, pool: r.pool });
     box.appendChild(votesLine);
 
     if (r.authorBonus > 0) {
       const bonusLine = document.createElement('div');
       bonusLine.className = 'reveal-line';
       bonusLine.textContent = r.authors.length > 1
-        ? `+${r.authorBonus} chips split between the authors`
-        : `+${r.authorBonus} chips to the author`;
+        ? t('author_bonus_split', { amount: r.authorBonus })
+        : t('author_bonus_single', { amount: r.authorBonus });
       box.appendChild(bonusLine);
     }
     if (r.payoutTotal > 0) {
       const payoutLine = document.createElement('div');
       payoutLine.className = 'reveal-line';
-      payoutLine.textContent = `+${r.payoutTotal} chips paid out to backers`;
+      payoutLine.textContent = t('payout_line', { amount: r.payoutTotal });
       box.appendChild(payoutLine);
     }
   }
@@ -818,7 +831,7 @@
   function renderReveal() {
     const results = (room.round && room.round.results) || [];
     document.getElementById('reveal-title').textContent =
-      room.state === 'final' ? 'Final Round Results' : `Round ${room.round.roundNumber} Results`;
+      room.state === 'final' ? t('final_round_results_title') : t('round_results_title', { round: room.round.roundNumber });
     renderRevealCurrent(results);
     renderLeaderboardPills(document.getElementById('reveal-leaderboard'), room.players);
 
@@ -891,7 +904,7 @@
   // a player stuck on a game screen (e.g. their room became invalid) had no
   // way back to login short of a manual page refresh.
   document.getElementById('btn-topbar-leave').addEventListener('click', () => {
-    if (!confirm('Leave this game?')) return;
+    if (!confirm(t('leave_game_confirm'))) return;
     leaveAndReturnToLogin();
   });
 })();
