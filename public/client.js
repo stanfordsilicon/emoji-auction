@@ -207,8 +207,26 @@
   let arcadeLang = null;
   let arcadePlayerId = null;
 
+  // Mirrors qmoji/app.js's own launchGame() transition (fade in "LOADING…"
+  // with a bar-fill, then navigate after a beat) so leaving a game feels
+  // like the same continuous arcade as entering one, instead of an instant
+  // jump cut.
+  function navigateWithLoadingScreen(href) {
+    const loadingScreen = document.getElementById('loadingScreen');
+    const fill = document.getElementById('loadingBarFill');
+    if (!loadingScreen || !fill) {
+      window.location.href = href;
+      return;
+    }
+    loadingScreen.classList.add('is-visible');
+    loadingScreen.setAttribute('aria-hidden', 'false');
+    fill.style.width = '0%';
+    requestAnimationFrame(() => { fill.style.width = '100%'; });
+    setTimeout(() => { window.location.href = href; }, 650);
+  }
+
   backToLaunchpadBtn.addEventListener('click', () => {
-    window.location.href = QMojiArcade.backToHomescreenUrl(arcadeRoomCode, arcadeLang, arcadePlayerId);
+    navigateWithLoadingScreen(QMojiArcade.backToHomescreenUrl(arcadeRoomCode, arcadeLang, arcadePlayerId));
   });
 
   (async function initArcadeLink() {
