@@ -324,6 +324,17 @@
 
   // ---------- CENTRAL ROOM RENDERER ----------
   function applyRoom(updatedRoom) {
+    // Detects being kicked: we were previously confirmed in this room (room
+    // is set), but this fresher snapshot's player list no longer includes
+    // us. The only path that removes a still-polling player from the list
+    // like this is the host's kick action -- an explicit "leave" already
+    // tears down polling locally first, and a dropped connection just flips
+    // connected=false without removing the seat.
+    if (room && Array.isArray(updatedRoom.players) && !updatedRoom.players.some((p) => p.id === myId)) {
+      returnToLogin(t('kicked_from_room'));
+      return;
+    }
+
     const prevState = room ? room.state : null;
     room = updatedRoom;
 
@@ -484,6 +495,40 @@
 
       li.appendChild(left);
       li.appendChild(readyBadge);
+
+      // Host-only controls for every OTHER player in the room -- kicking
+      // yourself would just be leaving, and transferring host to yourself is
+      // a no-op, so neither button is shown on the host's own row.
+      if (room.hostId === myId && p.id !== myId) {
+        const actions = document.createElement('span');
+        actions.className = 'player-actions';
+
+        const makeHostBtn = document.createElement('button');
+        makeHostBtn.type = 'button';
+        makeHostBtn.className = 'player-action-btn';
+        makeHostBtn.textContent = t('make_host_button');
+        makeHostBtn.addEventListener('click', async () => {
+          const res = await api('transfer-host', { targetId: p.id });
+          if (!res.ok) return handleErrorResponse(res);
+          applyRoom(res.room);
+        });
+        actions.appendChild(makeHostBtn);
+
+        const kickBtn = document.createElement('button');
+        kickBtn.type = 'button';
+        kickBtn.className = 'player-action-btn kick';
+        kickBtn.textContent = t('kick_button');
+        kickBtn.addEventListener('click', async () => {
+          if (!window.confirm(t('kick_confirm', { name: p.username }))) return;
+          const res = await api('kick-player', { targetId: p.id });
+          if (!res.ok) return handleErrorResponse(res);
+          applyRoom(res.room);
+        });
+        actions.appendChild(kickBtn);
+
+        li.appendChild(actions);
+      }
+
       list.appendChild(li);
     });
 

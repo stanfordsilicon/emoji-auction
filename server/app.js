@@ -231,6 +231,29 @@ app.post('/api/leave-room', async (req, res) => {
   }
 });
 
+// Host-only, lobby-only — see roomManager.kickPlayer for why kicking is
+// restricted to before the game starts.
+app.post('/api/kick-player', async (req, res) => {
+  try {
+    const { roomCode, playerId, targetId } = req.body || {};
+    const room = await rooms.kickPlayer(normCode(roomCode), normId(playerId), normId(targetId));
+    res.json({ ok: true, room: rooms.toClientView(room) });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, code: e.code });
+  }
+});
+
+// Host-only. Unlike kick-player, this works at any room state.
+app.post('/api/transfer-host', async (req, res) => {
+  try {
+    const { roomCode, playerId, targetId } = req.body || {};
+    const room = await rooms.transferHost(normCode(roomCode), normId(playerId), normId(targetId));
+    res.json({ ok: true, room: rooms.toClientView(room) });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, code: e.code });
+  }
+});
+
 // Sent every few seconds by a connected client — there's no persistent
 // socket left to notice a disconnect, so presence is tracked this way
 // instead (see roomManager's applyLazyStateUpdates for how staleness is

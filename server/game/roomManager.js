@@ -809,6 +809,41 @@ async function leaveRoom(roomCode, playerId) {
   return room;
 }
 
+// Lobby-only, host-only: once the game has started, players are mid-round
+// (submitted words, bets, votes) and removal mid-game risks leaving that
+// state inconsistent -- a disruptive player can still be dealt with by
+// waiting for the round to end, or by the host resetting via Play Again.
+async function kickPlayer(roomCode, requesterId, targetId) {
+  const { room } = await mutateRoom(roomCode, (r) => {
+    if (r.hostId !== requesterId) throw err('NOT_HOST', 'Only the host can remove a player.');
+    if (targetId === requesterId) throw err('CANNOT_KICK_SELF', "You can't remove yourself — use Go Home instead.");
+    if (r.state !== 'lobby') throw err('GAME_IN_PROGRESS', "Can't remove a player once the game has started.");
+    if (!r.players[targetId]) throw err('NOT_IN_ROOM', 'That player is no longer in the room.');
+    r.players[targetId].connected = false;
+    r.playerOrder = r.playerOrder.filter((id) => id !== targetId);
+    if (r.hostId === targetId) {
+      r.hostId = r.playerOrder.find((id) => r.players[id] && r.players[id].connected) || r.hostId;
+    }
+  });
+  if (!room) throw err('ROOM_NOT_FOUND', 'That room code does not exist.');
+  return room;
+}
+
+// No status restriction (unlike kickPlayer) -- handing host to someone else
+// mid-game is harmless, since host-only actions (start/next-round/play-again)
+// aren't reachable again until the game returns to the lobby or between
+// rounds anyway.
+async function transferHost(roomCode, requesterId, targetId) {
+  const { room } = await mutateRoom(roomCode, (r) => {
+    if (r.hostId !== requesterId) throw err('NOT_HOST', 'Only the host can transfer host.');
+    if (targetId === requesterId) return;
+    if (!r.players[targetId]) throw err('NOT_IN_ROOM', 'That player is no longer in the room.');
+    r.hostId = targetId;
+  });
+  if (!room) throw err('ROOM_NOT_FOUND', 'That room code does not exist.');
+  return room;
+}
+
 function buildLeaderboard(room) {
   return room.playerOrder
     .map((id) => room.players[id])
@@ -1121,6 +1156,8 @@ module.exports = {
   nextRound,
   playAgain,
   leaveRoom,
+  kickPlayer,
+  transferHost,
   buildLeaderboard,
   buildGameSessionRecord,
   toClientView,

@@ -307,6 +307,22 @@ body {
 .ready-badge.is-ready { color: var(--correct); }
 .ready-badge.is-waiting { color: var(--ink-soft); }
 
+.player-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.player-action-btn {
+  padding: 4px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--panel-line);
+  background: var(--bg-deep);
+  color: var(--ink-soft);
+  font-family: var(--pixel-font);
+  font-size: 0.5rem;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.player-action-btn:hover { border-color: var(--cyan); color: var(--cyan); }
+.player-action-btn.kick:hover { border-color: var(--orange); color: var(--orange); }
+
 .player-list li.disconnected,
 .leaderboard li.disconnected {
   opacity: 0.5;
