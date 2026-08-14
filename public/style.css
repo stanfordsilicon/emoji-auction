@@ -755,7 +755,7 @@ body {
   background: var(--panel);
   color: var(--ink-soft);
   font-family: var(--pixel-font);
-  font-size: 0.55rem;
+  font-size: 13px;
   letter-spacing: 0.03em;
   cursor: pointer;
   transition: border-color 0.15s ease, color 0.15s ease;
