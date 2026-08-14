@@ -86,6 +86,15 @@
     topbar.classList.toggle('hidden', !GAME_SCREENS.includes(name));
   }
 
+  // ---------- sound mute toggle ----------
+  const muteBtn = document.getElementById('muteBtn');
+  muteBtn.addEventListener('click', () => {
+    const next = !window.SFX.isMuted();
+    window.SFX.setMuted(next);
+    muteBtn.textContent = next ? '🔇' : '🔊';
+    muteBtn.classList.toggle('muted', next);
+  });
+
   function toast(message) {
     const el = document.getElementById('toast');
     el.textContent = message;
@@ -331,6 +340,7 @@
 
     if (room.state === 'writing' || room.state === 'betting' || room.state === 'voting') {
       if (room.state === 'betting' && prevState !== 'betting') localBetDrafts = {};
+      if (prevState !== room.state) window.SFX.phaseStart();
       startTimer(room.round.phaseEndsAt);
       if (room.state === 'writing') renderWriting();
       if (room.state === 'betting') renderBetting();
@@ -342,6 +352,7 @@
     // reveal or final
     clearInterval(timerInterval);
     if (prevState !== 'reveal' && prevState !== 'final') revealIndex = -1;
+    if (room.state === 'final' && prevState !== 'final') window.SFX.gameOver();
     renderReveal();
     if (room.state === 'final' && viewingFinalLocally) {
       showFinalScreen();
@@ -706,7 +717,7 @@
     for (let i = 0; i < totalHearts; i++) {
       const heart = document.createElement('span');
       heart.className = 'hearts-row-icon' + (i < heartsLeft ? '' : ' spent');
-      heart.textContent = i < heartsLeft ? '❤️' : '🤍';
+      heart.textContent = i < heartsLeft ? '❤️' : '💔';
       row.appendChild(heart);
     }
   }
@@ -862,6 +873,9 @@
   document.getElementById('btn-reveal-next').addEventListener('click', () => {
     const results = (room.round && room.round.results) || [];
     revealIndex = Math.min(results.length - 1, revealIndex + 1);
+    const current = results[revealIndex];
+    if (current && current.isWinner) window.SFX.correct();
+    else window.SFX.reveal();
     renderReveal();
   });
 

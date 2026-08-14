@@ -632,7 +632,6 @@ body {
   font-size: 1.1rem;
 }
 
-.hearts-row-icon.spent { opacity: 0.35; }
 
 /* ---------- REVEAL ---------- */
 .reveal-current {
@@ -762,6 +761,28 @@ body {
   transition: border-color 0.15s ease, color 0.15s ease;
 }
 .back-to-launchpad:hover { border-color: var(--cyan); color: var(--cyan); }
+
+.sound-toggle {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  z-index: 500;
+}
+.sound-toggle.muted { opacity: 0.55; }
+
+.icon-btn {
+  border: 2px solid var(--panel-line);
+  background: var(--panel);
+  color: var(--ink);
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  transition: border-color 0.15s ease;
+}
+.icon-btn:hover { border-color: var(--cyan); }
 
 /* ---------- loading screen (return-to-launchpad transition) ---------- */
 .loading-screen {
